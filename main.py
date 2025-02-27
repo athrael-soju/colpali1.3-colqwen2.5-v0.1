@@ -1,3 +1,5 @@
+# !pip install -q "qdrant-client" "colpali_engine>=0.3.7" "datasets" "huggingface_hub[hf_transfer]" "transformers>=4.45.0" "streamlit" "PyMuPDF" "Pillow"
+
 import streamlit as st
 import torch
 import numpy as np
@@ -55,15 +57,12 @@ def load_model():
     colqwen_model = ColQwen2.from_pretrained(
         "vidore/colqwen2.5-v0.2",
         torch_dtype=torch.bfloat16,
-        device_map="cuda:0",  # or "mps" if on Apple Silicon
-        attn_implementation="flash_attention_2" if is_flash_attn_2_available() else None,
+        device_map="cpu",  # change to "cuda:0" or "mps" if applicable
     ).eval()
-    colqwen_processor = ColQwen2Processor.rom_pretrained("vidore/colqwen2.5-v0.1")
+    colqwen_processor = ColQwen2Processor.from_pretrained("vidore/colqwen2.5-v0.1")
     return colqwen_model, colqwen_processor
 
-
 colqwen_model, colqwen_processor = load_model()
-
 
 # Alternative PDF conversion using PyMuPDF (avoids needing Poppler)
 def convert_pdf_to_images(file_bytes):
@@ -77,7 +76,6 @@ def convert_pdf_to_images(file_bytes):
         images.append(img)
     return images
 
-
 # Helper functions remain unchanged
 def get_patches(image_size, model_processor, model):
     # For ColQwen, we use its patch size and spatial merge size
@@ -86,7 +84,6 @@ def get_patches(image_size, model_processor, model):
         patch_size=model.patch_size,
         spatial_merge_size=model.spatial_merge_size,
     )
-
 
 def embed_and_mean_pool_batch(image_batch, model_processor, model):
     # Embed images using ColQwen
@@ -122,7 +119,6 @@ def embed_and_mean_pool_batch(image_batch, model_processor, model):
         pooled_by_columns_batch.append(pooled_by_columns.cpu().float().numpy().tolist())
     return image_embeddings_batch, pooled_by_rows_batch, pooled_by_columns_batch
 
-
 def upload_batch(
     original_batch,
     pooled_by_rows_batch,
@@ -144,15 +140,11 @@ def upload_batch(
     except Exception as e:
         st.write(f"Error during upsert: {e}")
 
-
 def batch_embed_query(query_batch, model_processor, model):
     with torch.no_grad():
-        processed_queries = model_processor.process_queries(query_batch).to(
-            model.device
-        )
+        processed_queries = model_processor.process_queries(query_batch).to(model.device)
         query_embeddings_batch = model(**processed_queries)
     return query_embeddings_batch.cpu().float().numpy()
-
 
 def reranking_search_batch(
     query_batch, collection_name, search_limit=20, prefetch_limit=200
@@ -179,7 +171,6 @@ def reranking_search_batch(
         collection_name=collection_name, requests=search_queries
     )
 
-
 # ---------------------- Streamlit App UI ---------------------- #
 st.title("PDF Upload and Query Application (ColQwen Experiment)")
 
@@ -198,38 +189,36 @@ if uploaded_file is not None:
     if pages:
         # Display thumbnails of each page
         st.image(pages, width=150, caption=[f"Page {i+1}" for i in range(len(pages))])
-        if st.button("Process and Upload PDF"):
-            original_embeddings = []
-            pooled_rows = []
-            pooled_columns = []
-            payloads = []
-            progress_bar = st.progress(0)
-            for i, page in enumerate(pages):
-                image = page.convert("RGB")
-                image_batch = [image]
-                try:
-                    orig_batch, pooled_rows_batch, pooled_columns_batch = (
-                        embed_and_mean_pool_batch(
-                            image_batch, colqwen_processor, colqwen_model
-                        )
-                    )
-                    original_embeddings.extend(orig_batch)
-                    pooled_rows.extend(pooled_rows_batch)
-                    pooled_columns.extend(pooled_columns_batch)
-                    payloads.append({"source": "uploaded_pdf", "index": i})
-                except Exception as e:
-                    st.write(f"Error processing page {i+1}: {e}")
-                    continue
-                progress_bar.progress((i + 1) / len(pages))
-            upload_batch(
-                np.asarray(original_embeddings, dtype=np.float32),
-                np.asarray(pooled_rows, dtype=np.float32),
-                np.asarray(pooled_columns, dtype=np.float32),
-                payloads,
-                collection_name,
-            )
-            st.success("PDF processing and upload complete!")
-            st.session_state["pdf_pages"] = pages
+        st.write("Processing and uploading PDF...")
+        original_embeddings = []
+        pooled_rows = []
+        pooled_columns = []
+        payloads = []
+        progress_bar = st.progress(0)
+        for i, page in enumerate(pages):
+            image = page.convert("RGB")
+            image_batch = [image]
+            try:
+                orig_batch, pooled_rows_batch, pooled_columns_batch = embed_and_mean_pool_batch(
+                    image_batch, colqwen_processor, colqwen_model
+                )
+                original_embeddings.extend(orig_batch)
+                pooled_rows.extend(pooled_rows_batch)
+                pooled_columns.extend(pooled_columns_batch)
+                payloads.append({"source": "uploaded_pdf", "index": i})
+            except Exception as e:
+                st.write(f"Error processing page {i+1}: {e}")
+                continue
+            progress_bar.progress((i + 1) / len(pages))
+        upload_batch(
+            np.asarray(original_embeddings, dtype=np.float32),
+            np.asarray(pooled_rows, dtype=np.float32),
+            np.asarray(pooled_columns, dtype=np.float32),
+            payloads,
+            collection_name,
+        )
+        st.success("PDF processing and upload complete!")
+        st.session_state["pdf_pages"] = pages
 
 # --- Query Section --- #
 if "pdf_pages" in st.session_state:
@@ -244,9 +233,7 @@ if "pdf_pages" in st.session_state:
             best_match = results[0].points[0]
             page_index = best_match.payload.get("index", None)
             st.write(f"Best matching page index: {page_index}")
-            if page_index is not None and page_index < len(
-                st.session_state["pdf_pages"]
-            ):
+            if page_index is not None and page_index < len(st.session_state['pdf_pages']):
                 st.image(
                     st.session_state["pdf_pages"][page_index],
                     caption=f"Page {page_index + 1}",

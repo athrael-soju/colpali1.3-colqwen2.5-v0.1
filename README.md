@@ -2,7 +2,40 @@
 
 ## Installation
 
+Activate your virtual environment. If you don't have one, you can create one by running the following command:
+
+```bash
+python -m venv venv
+```
+
+Then, activate the virtual environment by running the following command:
+
+```bash
+source venv/bin/activate
+```
+
+or for Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+You can deactivate the virtual environment by running the following command:
+
+```bash
+deactivate
+```
+
 To install the required packages, run the following command:
 
 ```bash
-!pip install -q "qdrant-client" "colpali_engine>=0.3.7" "datasets" "huggingface_hub[hf_transfer]" "transformers>=4.45.0" "streamlit" "PyMuPDF" "Pillow"
+pip install -r requirements.txt
+```
+
+## Usage
+
+To run the Streamlit app, run the following command:
+
+```bash
+streamlit run main.py
+```
