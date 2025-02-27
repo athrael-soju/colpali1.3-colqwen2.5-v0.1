@@ -30,6 +30,7 @@ To install the required packages, run the following command:
 
 ```bash
 pip install -r requirements.txt
+pip install git+https://github.com/illuin-tech/colpali
 ```
 
 ## Usage
