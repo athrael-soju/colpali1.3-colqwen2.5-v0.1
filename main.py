@@ -1,5 +1,3 @@
-# !pip install -q "qdrant-client" "colpali_engine>=0.3.7" "datasets" "huggingface_hub[hf_transfer]" "transformers>=4.45.0" "streamlit" "PyMuPDF" "Pillow"
-
 import streamlit as st
 import torch
 import numpy as np
